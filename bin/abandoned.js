@@ -61,9 +61,15 @@ async function main() {
     encoding: "utf8"
   });
 
-  const packageConfig = JSON.parse(packageJsonStr);
-  const packages = Object.keys(packageConfig.dependencies || {})
-    .concat(Object.keys(packageConfig.devDependencies || []));
+  const {
+    dependencies = {},
+    devDependencies = {}
+  } = JSON.parse(packageJsonStr);
+
+  const packages = [
+    ...Object.keys(dependencies),
+    ...Object.keys(devDependencies),
+  ]
 
   console.log("Found " + packages.length + " packages.");
   const dataForPackages = await Promise.all(packages.map(getInfoForPackage))
