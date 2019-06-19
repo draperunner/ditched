@@ -1,7 +1,7 @@
 #! /usr/bin/env node
 const path = require("path")
 const fs = require("fs")
-const request = require("request-promise-native")
+const https = require('https')
 const CliTable = require("cli-table")
 const colors = require("colors/safe")
 const prettyDate = require("pretty-date")
@@ -11,6 +11,20 @@ const ABANDONED_DAYS = 90
 const REGISTRY_URL = "https://registry.npmjs.org"
 
 const showAllPackages = process.argv.includes('--all') || process.argv.includes('-a')
+
+function getJSON(url) {
+  return new Promise((resolve, reject) => {
+    const request = https.get(url, (response) => {
+      if (response.statusCode >= 400) {
+        return reject(new Error(`Could not fetch URL ${url} package info. Status code ${response.statusCode}`));
+      }
+      const body = [];
+      response.on('data', (chunk) => body.push(chunk));
+      response.on('end', () => resolve(JSON.parse(body.join(''))));
+      request.on('error', (err) => reject(err))
+    })
+  })
+}
 
 function isAbandoned({ modifiedDate }) {
   const ageDays = (new Date() - modifiedDate) / MS_IN_A_DAY;
@@ -44,7 +58,7 @@ function printInfoTable(dataForPackages) {
 async function getInfoForPackage(packageName) {
   try {
     const regUrl = REGISTRY_URL + "/" + packageName;
-    const response = await request(regUrl, { json: true })
+    const response = await getJSON(regUrl)
     const modifiedDate = new Date(response.time.modified);
 
     return {
