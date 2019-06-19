@@ -10,6 +10,13 @@ const MS_IN_A_DAY = 1000 * 60 * 60 * 24
 const ABANDONED_DAYS = 90
 const REGISTRY_URL = "https://registry.npmjs.org"
 
+const showAllPackages = process.argv.includes('--all') || process.argv.includes('-a')
+
+function isAbandoned({ modifiedDate }) {
+  const ageDays = (new Date() - modifiedDate) / MS_IN_A_DAY;
+  return ageDays > ABANDONED_DAYS
+}
+
 function printInfoTable(dataForPackages) {
   const table = new CliTable({
     head: [
@@ -20,18 +27,16 @@ function printInfoTable(dataForPackages) {
     colWidths: [30, 40, 15]
   });
 
-  dataForPackages.sort((a, b) => b.modifiedDate - a.modifiedDate);
-
-  dataForPackages.forEach(({ name, modifiedDate }) => {
-    const ageDays = (new Date() - modifiedDate) / MS_IN_A_DAY;
-    const isAbandoned = ageDays > ABANDONED_DAYS;
-
-    table.push([
-      name,
-      prettyDate.format(modifiedDate),
-      isAbandoned ? colors.red("Yes") : colors.green("No")
-    ]);
-  });
+  dataForPackages
+    .filter(data => showAllPackages || isAbandoned(data))
+    .sort((a, b) => b.modifiedDate - a.modifiedDate)
+    .forEach((packageInfo) => {
+      table.push([
+        packageInfo.name,
+        prettyDate.format(packageInfo.modifiedDate),
+        isAbandoned(packageInfo) ? colors.red("Yes") : colors.green("No")
+      ]);
+    });
 
   console.log(table.toString());
 };
