@@ -1,39 +1,36 @@
 #! /usr/bin/env node
-var path = require("path"),
-    fs = require("fs"),
-    async = require("async"),
-    request = require("request"),
-    CliTable = require("cli-table"),
-    colors = require("colors/safe"),
-    prettyDate = require("pretty-date"),
-    ABANDONED_DAYS = 90,
-    registryApiUrl = "https://registry.npmjs.org",
-    packageJsonPath,
-    packageJsonStr,
-    packageConfig,
-    packages,
-    afterQueried;
+const path = require("path")
+const fs = require("fs")
+const async = require("async")
+const request = require("request")
+const CliTable = require("cli-table")
+const colors = require("colors/safe")
+const prettyDate = require("pretty-date")
 
-packageJsonPath = path.join(process.cwd(), "package.json");
+const ABANDONED_DAYS = 90
+const REGISTRY_URL = "https://registry.npmjs.org"
+
+const packageJsonPath = path.join(process.cwd(), "package.json");
 
 console.log("Looking for package.json in " + packageJsonPath + ".");
 
-packageJsonStr = fs.readFileSync(packageJsonPath, {
+const packageJsonStr = fs.readFileSync(packageJsonPath, {
   encoding: "utf8"
 });
-packageConfig = JSON.parse(packageJsonStr);
-packages = Object.keys(packageConfig.dependencies || {})
+
+const packageConfig = JSON.parse(packageJsonStr);
+const packages = Object.keys(packageConfig.dependencies || {})
   .concat(Object.keys(packageConfig.devDependencies || []));
 
 console.log("Found " + packages.length + " packages.");
 
-afterQueried = function (err, results) {
+function afterQueried(err, results) {
   if (err) {
     console.error(err);
     process.exit(1);
   }
 
-  var table = new CliTable({
+  const table = new CliTable({
       head: [
         colors.gray('Package'),
         colors.gray('Last Modified'),
@@ -47,11 +44,8 @@ afterQueried = function (err, results) {
   });
 
   results.forEach(function (res) {
-    var ageDays,
-        isAbandoned;
-
-    ageDays = ((new Date()) - res.modifiedDate) / 1000 / 60 / 60 / 24;
-    isAbandoned = ageDays > ABANDONED_DAYS;
+    const ageDays = ((new Date()) - res.modifiedDate) / 1000 / 60 / 60 / 24;
+    const isAbandoned = ageDays > ABANDONED_DAYS;
 
     table.push([
       res.name,
@@ -64,12 +58,9 @@ afterQueried = function (err, results) {
 };
 
 async.map(packages, function (packageName, cb) {
-  var afterGet,
-      regUrl;
+  const regUrl = REGISTRY_URL + "/" + packageName;
 
-  regUrl = registryApiUrl + "/" + packageName;
-
-  afterGet = function (err, resp) {
+  const afterGet = function (err, resp) {
     var modifiedDate;
 
     if (err) {
