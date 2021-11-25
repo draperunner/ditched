@@ -1,15 +1,32 @@
-# abandoned
+# ditched
 
-Command line tool to find abandoned npm dependencies in your project.
+Command line tool to find npm dependencies that have been ditched.
+A ditched package is one that has not been updated in a long time.
 
-![abandoned usage](screenshot.png)
+This is a fork of the abandoned project [abandoned](https://github.com/brendonboshell/abandoned).
+
+![ditched usage](screenshot.png)
 
 ## How to Use
 
-First,
+Within your project, run
 
-    npm install abandoned -g
+```
+npx abandoned
+```
 
-Then, within a project, run
+You can also install it as a dev dependency and use it in your scripts,
+for example as part of your build procedure or as a reminder after install.
 
-    abandoned
+```
+npm install --dev ditched
+```
+
+package.json:
+
+```
+"scripts": {
+  "test": "ditched",
+  "postinstall": "ditched"
+}
+```

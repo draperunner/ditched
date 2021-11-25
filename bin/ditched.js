@@ -7,7 +7,7 @@ const colors = require("colors/safe");
 const prettyDate = require("pretty-date");
 
 const MS_IN_A_DAY = 1000 * 60 * 60 * 24;
-const ABANDONED_DAYS = 90;
+const DITCHED_DAYS = 90;
 const REGISTRY_URL = "https://registry.npmjs.org";
 
 const showAllPackages =
@@ -31,9 +31,9 @@ function getJSON(url) {
   });
 }
 
-function isAbandoned({ modifiedDate }) {
+function isDitched({ modifiedDate }) {
   const ageDays = (new Date() - modifiedDate) / MS_IN_A_DAY;
-  return ageDays > ABANDONED_DAYS;
+  return ageDays > DITCHED_DAYS;
 }
 
 function printInfoTable(dataForPackages) {
@@ -41,19 +41,19 @@ function printInfoTable(dataForPackages) {
     head: [
       colors.gray("Package"),
       colors.gray("Last Modified"),
-      colors.gray("Abandoned?"),
+      colors.gray("Ditched?"),
     ],
     colWidths: [30, 40, 15],
   });
 
   dataForPackages
-    .filter((data) => showAllPackages || isAbandoned(data))
+    .filter((data) => showAllPackages || isDitched(data))
     .sort((a, b) => b.modifiedDate - a.modifiedDate)
     .forEach((packageInfo) => {
       table.push([
         packageInfo.name,
         prettyDate.format(packageInfo.modifiedDate),
-        isAbandoned(packageInfo) ? colors.red("Yes") : colors.green("No"),
+        isDitched(packageInfo) ? colors.red("Yes") : colors.green("No"),
       ]);
     });
 
@@ -97,7 +97,7 @@ async function main() {
   const dataForPackages = await Promise.all(packages.map(getInfoForPackage));
   printInfoTable(dataForPackages);
 
-  if (dataForPackages.filter(isAbandoned).length > 0) {
+  if (dataForPackages.filter(isDitched).length > 0) {
     process.exit(1);
   }
 }

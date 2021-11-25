@@ -1,6 +1,6 @@
 {
-  "name": "abandoned",
-  "description": "'npm outdated' for abandoned projects. find abandoned dependencies easily.",
+  "name": "ditched",
+  "description": "List dependencies that haven't been updated in a long time.",
   "version": "0.1.0",
   "keywords": [
     "cli",
@@ -10,19 +10,20 @@
     "outdated"
   ],
   "bugs": {
-    "url": "https://github.com/brendonboshell/abandoned/issues"
+    "url": "https://github.com/draperunner/ditched/issues"
   },
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/brendonboshell/abandoned.git"
+    "url": "https://github.com/draperunner/ditched.git"
   },
   "bin": {
-    "abandoned": "bin/abandoned.js"
+    "abandoned": "bin/ditched.js"
   },
   "scripts": {
-    "start": "node bin/abandoned.js",
-    "format": "prettier . --write"
+    "start": "node bin/ditched.js",
+    "format": "prettier . --write",
+    "postinstall": "npm start"
   },
   "dependencies": {
     "cli-table": "^0.3.1",
