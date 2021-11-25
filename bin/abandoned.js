@@ -96,6 +96,10 @@ async function main() {
   console.log("Found " + packages.length + " packages.");
   const dataForPackages = await Promise.all(packages.map(getInfoForPackage));
   printInfoTable(dataForPackages);
+
+  if (dataForPackages.filter(isAbandoned).length > 0) {
+    process.exit(1);
+  }
 }
 
 main();
