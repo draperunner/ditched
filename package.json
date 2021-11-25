@@ -18,15 +18,14 @@
     "url": "https://github.com/draperunner/ditched.git"
   },
   "bin": {
-    "abandoned": "bin/ditched.js"
+    "ditched": "./bin/ditched.js"
   },
   "files": [
     "bin"
   ],
   "scripts": {
     "start": "node bin/ditched.js",
-    "format": "prettier . --write",
-    "postinstall": "npm start"
+    "format": "prettier . --write"
   },
   "dependencies": {
     "cli-table": "^0.3.1",
