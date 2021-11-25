@@ -32,6 +32,7 @@ function getJSON(url) {
 }
 
 function isDitched({ modifiedDate }) {
+  if (!modifiedDate) return false;
   const ageDays = (new Date() - modifiedDate) / MS_IN_A_DAY;
   return ageDays > DITCHED_DAYS;
 }
@@ -50,11 +51,20 @@ function printInfoTable(dataForPackages) {
     .filter((data) => showAllPackages || isDitched(data))
     .sort((a, b) => b.modifiedDate - a.modifiedDate)
     .forEach((packageInfo) => {
-      table.push([
-        packageInfo.name,
-        prettyDate.format(packageInfo.modifiedDate),
-        isDitched(packageInfo) ? colors.red("Yes") : colors.green("No"),
-      ]);
+      const { name, modifiedDate } = packageInfo;
+
+      const formattedTime = modifiedDate
+        ? prettyDate.format(modifiedDate)
+        : "No package info found.";
+
+      let ditchedInfo = colors.red("?");
+      if (modifiedDate) {
+        ditchedInfo = isDitched(packageInfo)
+          ? colors.red("Yes")
+          : colors.green("No");
+      }
+
+      table.push([name, formattedTime, ditchedInfo]);
     });
 
   console.log(table.toString());
@@ -71,8 +81,9 @@ async function getInfoForPackage(packageName) {
       modifiedDate,
     };
   } catch (error) {
-    console.error(error);
-    process.exit(1);
+    return {
+      name: packageName,
+    };
   }
 }
 
