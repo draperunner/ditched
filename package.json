@@ -20,6 +20,9 @@
   "bin": {
     "abandoned": "bin/ditched.js"
   },
+  "files": [
+    "bin"
+  ],
   "scripts": {
     "start": "node bin/ditched.js",
     "format": "prettier . --write",
