@@ -21,12 +21,15 @@
     "abandoned": "bin/abandoned.js"
   },
   "scripts": {
-    "start": "node bin/abandoned.js"
+    "start": "node bin/abandoned.js",
+    "format": "prettier . --write"
   },
   "dependencies": {
     "cli-table": "^0.3.1",
     "colors": "^1.1.2",
     "pretty-date": "^0.2.0"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "prettier": "^2.5.0"
+  }
 }
