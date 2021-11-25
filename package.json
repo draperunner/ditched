@@ -1,7 +1,7 @@
 {
   "name": "ditched",
   "description": "List dependencies that haven't been updated in a long time.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "keywords": [
     "cli",
     "check",
