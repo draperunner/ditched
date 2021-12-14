@@ -2,6 +2,10 @@
   "name": "ditched",
   "description": "List dependencies that haven't been updated in a long time.",
   "version": "1.0.2",
+  "engines": {
+    "node": ">=12",
+    "npm": "8"
+  },
   "keywords": [
     "cli",
     "check",
@@ -18,14 +22,16 @@
     "url": "https://github.com/draperunner/ditched.git"
   },
   "bin": {
-    "ditched": "./bin/ditched.js"
+    "ditched": "./dist/ditched.js"
   },
   "files": [
-    "bin"
+    "dist"
   ],
   "scripts": {
-    "start": "node bin/ditched.js",
-    "format": "prettier . --write"
+    "start": "node dist/ditched.js",
+    "format": "prettier . --write",
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "cli-table": "^0.3.1",
@@ -33,6 +39,9 @@
     "pretty-date": "^0.2.0"
   },
   "devDependencies": {
-    "prettier": "^2.5.0"
+    "@types/cli-table": "^0.3.0",
+    "@types/node": "^12.20.37",
+    "prettier": "^2.5.0",
+    "typescript": "^4.5.4"
   }
 }

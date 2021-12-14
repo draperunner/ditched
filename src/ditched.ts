@@ -1,10 +1,10 @@
 #! /usr/bin/env node
-const path = require("path");
-const fs = require("fs");
-const https = require("https");
-const CliTable = require("cli-table");
-const colors = require("colors/safe");
-const prettyDate = require("pretty-date");
+import path from "path";
+import fs from "fs";
+import https from "https";
+import CliTable from "cli-table";
+import colors from "colors/safe";
+import prettyDate from "pretty-date";
 
 const MS_IN_A_DAY = 1000 * 60 * 60 * 24;
 const DITCHED_DAYS = 90;
@@ -13,17 +13,21 @@ const REGISTRY_URL = "https://registry.npmjs.org";
 const showAllPackages =
   process.argv.includes("--all") || process.argv.includes("-a");
 
-function getJSON(url) {
+function differenceInMilliseconds(dateA: Date, dateB: Date): number {
+  return dateA.getTime() - dateB.getTime();
+}
+
+function getJSON<T>(url: string): Promise<T> {
   return new Promise((resolve, reject) => {
     const request = https.get(url, (response) => {
-      if (response.statusCode >= 400) {
+      if (!response.statusCode || response.statusCode >= 400) {
         return reject(
           new Error(
             `Could not fetch URL ${url} package info. Status code ${response.statusCode}`
           )
         );
       }
-      const body = [];
+      const body: any[] = [];
       response.on("data", (chunk) => body.push(chunk));
       response.on("end", () => resolve(JSON.parse(body.join(""))));
       request.on("error", (err) => reject(err));
@@ -31,13 +35,19 @@ function getJSON(url) {
   });
 }
 
-function isDitched({ modifiedDate }) {
+type PackageInfo = {
+  name: string;
+  modifiedDate?: Date;
+};
+
+function isDitched({ modifiedDate }: PackageInfo): boolean {
   if (!modifiedDate) return false;
-  const ageDays = (new Date() - modifiedDate) / MS_IN_A_DAY;
+  const ageDays =
+    differenceInMilliseconds(new Date(), modifiedDate) / MS_IN_A_DAY;
   return ageDays > DITCHED_DAYS;
 }
 
-function printInfoTable(dataForPackages) {
+function printInfoTable(dataForPackages: PackageInfo[]): void {
   const table = new CliTable({
     head: [
       colors.gray("Package"),
@@ -49,7 +59,11 @@ function printInfoTable(dataForPackages) {
 
   dataForPackages
     .filter((data) => showAllPackages || isDitched(data))
-    .sort((a, b) => b.modifiedDate - a.modifiedDate)
+    .sort((a, b) => {
+      if (!a.modifiedDate) return -1;
+      if (!b.modifiedDate) return 1;
+      return differenceInMilliseconds(b.modifiedDate, a.modifiedDate);
+    })
     .forEach((packageInfo) => {
       const { name, modifiedDate } = packageInfo;
 
@@ -70,10 +84,10 @@ function printInfoTable(dataForPackages) {
   console.log(table.toString());
 }
 
-async function getInfoForPackage(packageName) {
+async function getInfoForPackage(packageName: string): Promise<PackageInfo> {
   try {
     const regUrl = REGISTRY_URL + "/" + packageName;
-    const response = await getJSON(regUrl);
+    const response = await getJSON<{ time: { modified: string } }>(regUrl);
     const modifiedDate = new Date(response.time.modified);
 
     return {
