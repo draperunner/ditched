@@ -28,15 +28,14 @@
     "dist"
   ],
   "scripts": {
-    "start": "node dist/ditched.js",
+    "start": "npm run build && node dist/ditched.js",
     "format": "prettier . --write",
     "build": "tsc",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "cli-table": "^0.3.1",
-    "colors": "^1.1.2",
-    "pretty-date": "^0.2.0"
+    "colors": "^1.1.2"
   },
   "devDependencies": {
     "@types/cli-table": "^0.3.0",

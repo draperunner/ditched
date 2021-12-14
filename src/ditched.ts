@@ -4,7 +4,7 @@ import fs from "fs";
 import https from "https";
 import CliTable from "cli-table";
 import colors from "colors/safe";
-import prettyDate from "pretty-date";
+import { differenceInMilliseconds, formatTimeSince } from "./time";
 
 const MS_IN_A_DAY = 1000 * 60 * 60 * 24;
 const DITCHED_DAYS = 90;
@@ -12,10 +12,6 @@ const REGISTRY_URL = "https://registry.npmjs.org";
 
 const showAllPackages =
   process.argv.includes("--all") || process.argv.includes("-a");
-
-function differenceInMilliseconds(dateA: Date, dateB: Date): number {
-  return dateA.getTime() - dateB.getTime();
-}
 
 function getJSON<T>(url: string): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -68,7 +64,7 @@ function printInfoTable(dataForPackages: PackageInfo[]): void {
       const { name, modifiedDate } = packageInfo;
 
       const formattedTime = modifiedDate
-        ? prettyDate.format(modifiedDate)
+        ? formatTimeSince(modifiedDate)
         : "No package info found.";
 
       let ditchedInfo = colors.red("?");
