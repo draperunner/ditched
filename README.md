@@ -33,4 +33,10 @@ package.json:
 
 ### Options
 
-`--all`/`-a`: Include all dependencies in the resulting table, not only those that are ditched (updated > 90 days ago).
+````
+      --help     Show help                                             [boolean]
+      --version  Show version number                                   [boolean]
+  -a, --all      Include all dependencies in the resulting table, not only those
+                 that are ditched                     [boolean] [default: false]
+                 ```
+````

@@ -4,14 +4,26 @@ import fs from "fs";
 import https from "https";
 import CliTable from "cli-table";
 import colors from "colors/safe";
+import yargs from "yargs/yargs";
+import { hideBin } from "yargs/helpers";
+
 import { differenceInMilliseconds, formatTimeSince } from "./time";
 
 const MS_IN_A_DAY = 1000 * 60 * 60 * 24;
 const DITCHED_DAYS = 90;
 const REGISTRY_URL = "https://registry.npmjs.org";
 
-const showAllPackages =
-  process.argv.includes("--all") || process.argv.includes("-a");
+async function parseArgs() {
+  return await yargs(hideBin(process.argv)).options({
+    all: {
+      type: "boolean",
+      default: false,
+      alias: ["a"],
+      description:
+        "Include all dependencies in the resulting table, not only those that are ditched",
+    },
+  }).argv;
+}
 
 function getJSON<T>(url: string): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -43,7 +55,10 @@ function isDitched({ modifiedDate }: PackageInfo): boolean {
   return ageDays > DITCHED_DAYS;
 }
 
-function printInfoTable(dataForPackages: PackageInfo[]): void {
+function printInfoTable(
+  dataForPackages: PackageInfo[],
+  showAllPackages: boolean
+): void {
   const table = new CliTable({
     head: [
       colors.gray("Package"),
@@ -98,6 +113,8 @@ async function getInfoForPackage(packageName: string): Promise<PackageInfo> {
 }
 
 async function main() {
+  const argv = await parseArgs();
+
   const packageJsonPath = path.join(process.cwd(), "package.json");
 
   console.log("Looking for package.json in " + packageJsonPath + ".");
@@ -116,7 +133,7 @@ async function main() {
 
   console.log("Found " + packages.length + " packages.");
   const dataForPackages = await Promise.all(packages.map(getInfoForPackage));
-  printInfoTable(dataForPackages);
+  printInfoTable(dataForPackages, argv.all);
 
   if (dataForPackages.filter(isDitched).length > 0) {
     process.exit(1);
