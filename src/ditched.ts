@@ -59,6 +59,14 @@ function printInfoTable(
   dataForPackages: PackageInfo[],
   showAllPackages: boolean
 ): void {
+  const packagesToShow = dataForPackages.filter(
+    (data) => showAllPackages || isDitched(data, ditchDays)
+  );
+
+  if (!packagesToShow.length) {
+    return;
+  }
+
   const table = new CliTable({
     head: [
       colors.gray("Package"),
@@ -68,8 +76,7 @@ function printInfoTable(
     colWidths: [30, 40, 15],
   });
 
-  dataForPackages
-    .filter((data) => showAllPackages || isDitched(data))
+  packagesToShow
     .sort((a, b) => {
       if (!a.modifiedDate) return -1;
       if (!b.modifiedDate) return 1;
