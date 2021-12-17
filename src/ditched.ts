@@ -117,8 +117,6 @@ async function main() {
 
   const packageJsonPath = path.join(process.cwd(), "package.json");
 
-  console.log("Looking for package.json in " + packageJsonPath + ".");
-
   const packageJsonStr = fs.readFileSync(packageJsonPath, {
     encoding: "utf8",
   });
@@ -131,7 +129,6 @@ async function main() {
     ...Object.keys(devDependencies),
   ];
 
-  console.log("Found " + packages.length + " packages.");
   const dataForPackages = await Promise.all(packages.map(getInfoForPackage));
   printInfoTable(dataForPackages, argv.all);
 
