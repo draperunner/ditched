@@ -15,6 +15,12 @@ function getTimeStringIfBelowThreshold(
   return `${quotient} ${unit}${plural ? "s" : ""}`;
 }
 
+function formatLocalDate(date: Date): string {
+  const month = `${date.getMonth()}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
 const HOUR = 60 * MINUTE;
@@ -43,5 +49,5 @@ export function formatTimeSince(date: Date): string {
       "year"
     )}`;
 
-  return timeDiffString + " ago";
+  return `${timeDiffString} ago (${formatLocalDate(date)})`;
 }
