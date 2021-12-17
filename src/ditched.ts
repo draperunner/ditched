@@ -10,7 +10,6 @@ import { hideBin } from "yargs/helpers";
 import { differenceInMilliseconds, formatTimeSince } from "./time";
 
 const MS_IN_A_DAY = 1000 * 60 * 60 * 24;
-const DITCHED_DAYS = 90;
 const REGISTRY_URL = "https://registry.npmjs.org";
 
 async function parseArgs() {
@@ -21,6 +20,13 @@ async function parseArgs() {
       alias: ["a"],
       description:
         "Include all dependencies in the resulting table, not only those that are ditched",
+    },
+    days: {
+      type: "number",
+      default: 365,
+      alias: ["d"],
+      description:
+        "The number of days since last release needed to consider a package as ditched",
     },
   }).argv;
 }
@@ -48,16 +54,17 @@ type PackageInfo = {
   modifiedDate?: Date;
 };
 
-function isDitched({ modifiedDate }: PackageInfo): boolean {
+function isDitched({ modifiedDate }: PackageInfo, ditchDays: number): boolean {
   if (!modifiedDate) return false;
   const ageDays =
     differenceInMilliseconds(new Date(), modifiedDate) / MS_IN_A_DAY;
-  return ageDays > DITCHED_DAYS;
+  return ageDays > ditchDays;
 }
 
 function printInfoTable(
   dataForPackages: PackageInfo[],
-  showAllPackages: boolean
+  showAllPackages: boolean,
+  ditchDays: number
 ): void {
   const packagesToShow = dataForPackages.filter(
     (data) => showAllPackages || isDitched(data, ditchDays)
@@ -91,7 +98,7 @@ function printInfoTable(
 
       let ditchedInfo = colors.red("?");
       if (modifiedDate) {
-        ditchedInfo = isDitched(packageInfo)
+        ditchedInfo = isDitched(packageInfo, ditchDays)
           ? colors.red("Yes")
           : colors.green("No");
       }
@@ -137,7 +144,7 @@ async function main() {
   ];
 
   const dataForPackages = await Promise.all(packages.map(getInfoForPackage));
-  printInfoTable(dataForPackages, argv.all);
+  printInfoTable(dataForPackages, argv.all, argv.days);
 
   if (dataForPackages.filter(isDitched).length > 0) {
     process.exit(1);

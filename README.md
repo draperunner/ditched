@@ -1,7 +1,7 @@
 # ditched
 
 Command line tool to find npm dependencies that have been ditched.
-A ditched package is one that has not been updated in more than 90 days.
+A ditched package is one that has not been updated in more than one year.
 
 This is a fork of the abandoned project [abandoned](https://github.com/brendonboshell/abandoned).
 
@@ -33,10 +33,11 @@ package.json:
 
 ### Options
 
-````
+```
       --help     Show help                                             [boolean]
       --version  Show version number                                   [boolean]
   -a, --all      Include all dependencies in the resulting table, not only those
                  that are ditched                     [boolean] [default: false]
-                 ```
-````
+  -d, --days     The number of days since last release needed to consider a
+                 package as ditched                      [number] [default: 365]
+```
