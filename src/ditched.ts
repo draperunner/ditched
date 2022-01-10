@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs";
 import https from "https";
 import CliTable from "cli-table";
-import colors from "colors/safe";
+import chalk from "chalk";
 import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
 
@@ -76,9 +76,9 @@ function printInfoTable(
 
   const table = new CliTable({
     head: [
-      colors.gray("Package"),
-      colors.gray("Last Modified"),
-      colors.gray("Ditched?"),
+      chalk.gray("Package"),
+      chalk.gray("Last Modified"),
+      chalk.gray("Ditched?"),
     ],
     colWidths: [30, 40, 15],
   });
@@ -96,11 +96,11 @@ function printInfoTable(
         ? formatTimeSince(modifiedDate)
         : "No package info found.";
 
-      let ditchedInfo = colors.red("?");
+      let ditchedInfo = chalk.red("?");
       if (modifiedDate) {
         ditchedInfo = isDitched(packageInfo, ditchDays)
-          ? colors.red("Yes")
-          : colors.green("No");
+          ? chalk.red("Yes")
+          : chalk.green("No");
       }
 
       table.push([name, formattedTime, ditchedInfo]);
