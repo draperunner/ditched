@@ -1,4 +1,4 @@
-#! /usr/bin/env node
+#!/usr/bin/env node
 import path from "path";
 import fs from "fs";
 import https from "https";
@@ -49,15 +49,28 @@ function getJSON<T>(url: string): Promise<T> {
   });
 }
 
-type PackageInfo = {
-  name: string;
-  modifiedDate?: Date;
+// A subset of the response returned by npm's registry
+type RegistryResponse = {
+  "dist-tags": Record<string, string>;
+  time: {
+    created: string;
+    modified: string;
+    [version: string]: string;
+  };
 };
 
-function isDitched({ modifiedDate }: PackageInfo, ditchDays: number): boolean {
-  if (!modifiedDate) return false;
+type PackageInfo = {
+  name: string;
+  mostRecentReleaseDate?: Date;
+};
+
+function isDitched(
+  { mostRecentReleaseDate }: PackageInfo,
+  ditchDays: number
+): boolean {
+  if (!mostRecentReleaseDate) return false;
   const ageDays =
-    differenceInMilliseconds(new Date(), modifiedDate) / MS_IN_A_DAY;
+    differenceInMilliseconds(new Date(), mostRecentReleaseDate) / MS_IN_A_DAY;
   return ageDays > ditchDays;
 }
 
@@ -77,7 +90,7 @@ function printInfoTable(
   const table = new CliTable({
     head: [
       chalk.gray("Package"),
-      chalk.gray("Last Modified"),
+      chalk.gray("Latest Release"),
       chalk.gray("Ditched?"),
     ],
     colWidths: [30, 40, 15],
@@ -85,19 +98,22 @@ function printInfoTable(
 
   packagesToShow
     .sort((a, b) => {
-      if (!a.modifiedDate) return -1;
-      if (!b.modifiedDate) return 1;
-      return differenceInMilliseconds(b.modifiedDate, a.modifiedDate);
+      if (!a.mostRecentReleaseDate) return -1;
+      if (!b.mostRecentReleaseDate) return 1;
+      return differenceInMilliseconds(
+        b.mostRecentReleaseDate,
+        a.mostRecentReleaseDate
+      );
     })
     .forEach((packageInfo) => {
-      const { name, modifiedDate } = packageInfo;
+      const { name, mostRecentReleaseDate } = packageInfo;
 
-      const formattedTime = modifiedDate
-        ? formatTimeSince(modifiedDate)
+      const formattedTime = mostRecentReleaseDate
+        ? formatTimeSince(mostRecentReleaseDate)
         : "No package info found.";
 
       let ditchedInfo = chalk.red("?");
-      if (modifiedDate) {
+      if (mostRecentReleaseDate) {
         ditchedInfo = isDitched(packageInfo, ditchDays)
           ? chalk.red("Yes")
           : chalk.green("No");
@@ -112,12 +128,18 @@ function printInfoTable(
 async function getInfoForPackage(packageName: string): Promise<PackageInfo> {
   try {
     const regUrl = REGISTRY_URL + "/" + packageName;
-    const response = await getJSON<{ time: { modified: string } }>(regUrl);
-    const modifiedDate = new Date(response.time.modified);
+    const response = await getJSON<RegistryResponse>(regUrl);
+
+    const mostRecentReleaseDate = new Date(
+      Object.entries(response.time)
+        .filter(([key]) => key !== "created" && key !== "modified")
+        .map(([, value]) => value)
+        .reduce((acc, el) => (el > acc ? el : acc))
+    );
 
     return {
       name: packageName,
-      modifiedDate,
+      mostRecentReleaseDate,
     };
   } catch (error) {
     return {
