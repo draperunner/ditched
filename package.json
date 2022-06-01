@@ -1,7 +1,7 @@
 {
   "name": "ditched",
   "description": "List dependencies that haven't been updated in a long time.",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "engines": {
     "node": ">=12",
     "npm": "8"
