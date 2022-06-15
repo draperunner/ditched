@@ -163,8 +163,14 @@ async function getInfoForPackage(
       name: packageName,
       mostRecentReleaseDate,
     };
+
     packageInfoCache[packageName] = result;
-    if (levels > 0) {
+
+    if (levels === 1) {
+      await Promise.all(
+        dependencyPackages.map((pkg) => getInfoForPackage(pkg, 0))
+      );
+    } else if (levels > 1) {
       for (const dependencyPackage of dependencyPackages) {
         await getInfoForPackage(dependencyPackage, levels - 1);
       }
