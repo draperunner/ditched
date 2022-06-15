@@ -34,10 +34,12 @@ package.json:
 ### Options
 
 ```
+Options:
       --help     Show help                                             [boolean]
       --version  Show version number                                   [boolean]
   -a, --all      Include all dependencies in the resulting table, not only those
                  that are ditched                     [boolean] [default: false]
   -d, --days     The number of days since last release needed to consider a
                  package as ditched                      [number] [default: 365]
+  -l, --levels   How many levels we go down recursively    [number] [default: 0]
 ```
