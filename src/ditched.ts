@@ -32,8 +32,7 @@ async function parseArgs() {
       type: "number",
       default: 0,
       alias: ["l"],
-      description:
-        "How many levels we go down recursively",
+      description: "How many levels we go down recursively",
     },
   }).argv;
 }
@@ -133,9 +132,12 @@ function printInfoTable(
   console.log(table.toString());
 }
 
-async function getInfoForPackage(packageName: string, levels: number): Promise<PackageInfo> {
+async function getInfoForPackage(
+  packageName: string,
+  levels: number
+): Promise<PackageInfo> {
   if (packageName in packageInfoCache) {
-    return packageInfoCache[packageName]
+    return packageInfoCache[packageName];
   }
   try {
     const regUrl = REGISTRY_URL + "/" + packageName;
@@ -143,12 +145,14 @@ async function getInfoForPackage(packageName: string, levels: number): Promise<P
 
     const mostRecentReleasedEntry = Object.entries(response.time)
       .filter(([key]) => key !== "created" && key !== "modified")
-      .reduce((acc, el) => (el[1] > acc[1] ? el : acc))
+      .reduce((acc, el) => (el[1] > acc[1] ? el : acc));
 
     const mostRecentReleaseDate = new Date(mostRecentReleasedEntry[1]);
     const mostRecentReleaseVersion = mostRecentReleasedEntry[0];
-    const mostRecentReleaseVersionDetails = response.versions[mostRecentReleaseVersion];
-    const { dependencies = {}, devDependencies = {} } = mostRecentReleaseVersionDetails;
+    const mostRecentReleaseVersionDetails =
+      response.versions[mostRecentReleaseVersion];
+    const { dependencies = {}, devDependencies = {} } =
+      mostRecentReleaseVersionDetails;
 
     const dependencyPackages = [
       ...Object.keys(dependencies),
@@ -162,7 +166,7 @@ async function getInfoForPackage(packageName: string, levels: number): Promise<P
     packageInfoCache[packageName] = result;
     if (levels > 0) {
       for (const dependencyPackage of dependencyPackages) {
-        await getInfoForPackage(dependencyPackage, levels - 1)
+        await getInfoForPackage(dependencyPackage, levels - 1);
       }
     }
     return result;
@@ -173,7 +177,7 @@ async function getInfoForPackage(packageName: string, levels: number): Promise<P
   }
 }
 
-const packageInfoCache: {[key: string]: PackageInfo} = {}
+const packageInfoCache: { [key: string]: PackageInfo } = {};
 
 async function main() {
   const argv = await parseArgs();
@@ -192,17 +196,18 @@ async function main() {
     ...Object.keys(devDependencies),
   ];
 
-  let dataForPackages: PackageInfo[] = []
+  let dataForPackages: PackageInfo[] = [];
   if (argv.levels === 0) {
-    dataForPackages = await Promise.all(packages.map(packageName => getInfoForPackage(packageName, 0)));
-  }
-  else {
+    dataForPackages = await Promise.all(
+      packages.map((packageName) => getInfoForPackage(packageName, 0))
+    );
+  } else {
     for (const packageName of packages) {
-      await getInfoForPackage(packageName, argv.levels)
+      await getInfoForPackage(packageName, argv.levels);
     }
-    dataForPackages = Object.values(packageInfoCache)
+    dataForPackages = Object.values(packageInfoCache);
   }
-  
+
   printInfoTable(dataForPackages, argv.all, argv.days);
 
   if (dataForPackages.filter(isDitched).length > 0) {
