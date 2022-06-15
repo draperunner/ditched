@@ -202,14 +202,17 @@ async function main() {
     ...Object.keys(devDependencies),
   ];
 
+  const levels =
+    Number.isSafeInteger(argv.levels) && argv.levels >= 0 ? argv.levels : 0;
+
   let dataForPackages: PackageInfo[] = [];
-  if (argv.levels === 0) {
+  if (levels === 0) {
     dataForPackages = await Promise.all(
       packages.map((packageName) => getInfoForPackage(packageName, 0))
     );
   } else {
     for (const packageName of packages) {
-      await getInfoForPackage(packageName, argv.levels);
+      await getInfoForPackage(packageName, levels);
     }
     dataForPackages = Object.values(packageInfoCache);
   }
