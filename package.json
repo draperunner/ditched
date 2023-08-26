@@ -4,7 +4,7 @@
   "version": "2.2.0",
   "engines": {
     "node": ">=12",
-    "npm": "8"
+    "npm": ">=8"
   },
   "keywords": [
     "cli",
