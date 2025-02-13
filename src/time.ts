@@ -6,7 +6,7 @@ function getTimeStringIfBelowThreshold(
   diffInMs: number,
   threshold: number,
   divisor: number,
-  unit: string
+  unit: string,
 ): string | undefined {
   if (diffInMs >= threshold) return;
 
@@ -46,7 +46,7 @@ export function formatTimeSince(date: Date): string {
       diffMs,
       Infinity,
       YEAR,
-      "year"
+      "year",
     )}`;
 
   return `${timeDiffString} ago (${formatLocalDate(date)})`;

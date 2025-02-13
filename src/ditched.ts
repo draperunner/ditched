@@ -7,7 +7,7 @@ import chalk from "chalk";
 import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
 
-import { differenceInMilliseconds, formatTimeSince } from "./time";
+import { differenceInMilliseconds, formatTimeSince } from "./time.js";
 
 const MS_IN_A_DAY = 1000 * 60 * 60 * 24;
 const REGISTRY_URL = "https://registry.npmjs.org";
@@ -43,8 +43,8 @@ function getJSON<T>(url: string): Promise<T> {
       if (!response.statusCode || response.statusCode >= 400) {
         return reject(
           new Error(
-            `Could not fetch URL ${url} package info. Status code ${response.statusCode}`
-          )
+            `Could not fetch URL ${url} package info. Status code ${response.statusCode}`,
+          ),
         );
       }
       const body: any[] = [];
@@ -73,7 +73,7 @@ type PackageInfo = {
 
 function isDitched(
   { mostRecentReleaseDate }: PackageInfo,
-  ditchDays: number
+  ditchDays: number,
 ): boolean {
   if (!mostRecentReleaseDate) return false;
   const ageDays =
@@ -84,10 +84,10 @@ function isDitched(
 function printInfoTable(
   dataForPackages: PackageInfo[],
   showAllPackages: boolean,
-  ditchDays: number
+  ditchDays: number,
 ): void {
   const packagesToShow = dataForPackages.filter(
-    (data) => showAllPackages || isDitched(data, ditchDays)
+    (data) => showAllPackages || isDitched(data, ditchDays),
   );
 
   if (!packagesToShow.length) {
@@ -109,7 +109,7 @@ function printInfoTable(
       if (!b.mostRecentReleaseDate) return 1;
       return differenceInMilliseconds(
         b.mostRecentReleaseDate,
-        a.mostRecentReleaseDate
+        a.mostRecentReleaseDate,
       );
     })
     .forEach((packageInfo) => {
@@ -134,7 +134,7 @@ function printInfoTable(
 
 async function getInfoForPackage(
   packageName: string,
-  levels: number
+  levels: number,
 ): Promise<PackageInfo> {
   if (packageName in packageInfoCache) {
     return packageInfoCache[packageName];
@@ -168,7 +168,7 @@ async function getInfoForPackage(
 
     if (levels === 1) {
       await Promise.all(
-        dependencyPackages.map((pkg) => getInfoForPackage(pkg, 0))
+        dependencyPackages.map((pkg) => getInfoForPackage(pkg, 0)),
       );
     } else if (levels > 1) {
       for (const dependencyPackage of dependencyPackages) {
@@ -208,7 +208,7 @@ async function main() {
   let dataForPackages: PackageInfo[] = [];
   if (levels === 0) {
     dataForPackages = await Promise.all(
-      packages.map((packageName) => getInfoForPackage(packageName, 0))
+      packages.map((packageName) => getInfoForPackage(packageName, 0)),
     );
   } else {
     for (const packageName of packages) {
