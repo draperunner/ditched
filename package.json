@@ -4,8 +4,7 @@
   "version": "3.0.0",
   "type": "module",
   "engines": {
-    "node": ">=18",
-    "npm": ">=10"
+    "node": ">=20"
   },
   "keywords": [
     "cli",
@@ -35,15 +34,15 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "chalk": "^5.4.1",
+    "chalk": "^5.6.2",
     "cli-table": "^0.3.11",
     "yargs": "^17.7.2"
   },
   "devDependencies": {
     "@types/cli-table": "^0.3.4",
-    "@types/node": "^12.20.55",
-    "@types/yargs": "^17.0.33",
-    "prettier": "^3.5.1",
-    "typescript": "^5.7.3"
+    "@types/node": "^24.10.9",
+    "@types/yargs": "^17.0.35",
+    "prettier": "^3.8.0",
+    "typescript": "^5.9.3"
   }
 }
