@@ -5,8 +5,9 @@
     "target": "ES2023",
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
-    "strict": true,
-    "outDir": "dist"
+    "rootDir": "src",
+    "outDir": "dist",
+    "types": ["node"]
   },
   "include": ["src"]
 }
