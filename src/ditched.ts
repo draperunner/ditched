@@ -1,14 +1,25 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
+import { createInterface } from "node:readline";
+import { Readable, Transform, Writable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
 
 import { daysSince } from "./time.js";
 
-const REGISTRY_URL = "https://registry.npmjs.org";
+type RegistryResponse = {
+  "dist-tags": Record<string, string>;
+  time: {
+    created: string;
+    modified: string;
+    [version: string]: string;
+  };
+};
 
-const packageInfoCache: { [key: string]: PackageInfo } = {};
+type FileRecord = { path: string; includeDev: boolean };
+type DitchedPackage = { name: string; ageDays: number };
 
 async function parseArgs() {
   return await yargs(hideBin(process.argv))
@@ -19,8 +30,8 @@ async function parseArgs() {
         yargs.positional("files", {
           type: "string",
           array: true,
-          description: "One or more package.json files to check",
-          default: ["./package.json"],
+          description:
+            'One or more package.json files to check (default "./package.json"). Pass "-" to read newline-delimited paths from stdin.',
         }),
     )
     .options({
@@ -31,11 +42,18 @@ async function parseArgs() {
         description:
           "The number of days since last release needed to consider a package as ditched",
       },
-      levels: {
+      concurrency: {
         type: "number",
-        default: 0,
-        alias: ["l"],
-        description: "How many levels we go down recursively",
+        default: 20,
+        alias: ["c"],
+        description:
+          "The maximum number of concurrent registry requests (one request per package)",
+      },
+      registry: {
+        type: "string",
+        default: "https://registry.npmjs.org",
+        alias: ["r"],
+        description: "The URL of the npm registry to use",
       },
     })
     .example(
@@ -46,177 +64,220 @@ async function parseArgs() {
       "ditched ./package.json ./packages/*/package.json",
       "Monorepo: Find ditched packages in the specified package.json files.",
     )
+    .example(
+      "find . -name package.json | ditched -",
+      "Read newline-delimited package.json paths from stdin.",
+    )
     .parseAsync();
 }
 
-async function getJSON<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(
-      `Could not fetch URL ${url} package info. Status code ${res.status}`,
-    );
+class FilesToPackageNames extends Transform {
+  constructor() {
+    super({ objectMode: true });
   }
-  return (await res.json()) as T;
+
+  override _transform(
+    record: FileRecord,
+    _enc: BufferEncoding,
+    cb: (err?: Error | null) => void,
+  ): void {
+    const { path: filePath, includeDev } = record;
+    readFile(filePath, { encoding: "utf8" })
+      .then((contents) => {
+        const { dependencies = {}, devDependencies = {} } = JSON.parse(
+          contents,
+        ) as {
+          dependencies?: Record<string, string>;
+          devDependencies?: Record<string, string>;
+        };
+
+        for (const name of Object.keys(dependencies)) this.push(name);
+        if (includeDev) {
+          for (const name of Object.keys(devDependencies)) this.push(name);
+        }
+        cb();
+      })
+      .catch(() => {
+        if (includeDev) {
+          cb(new Error(`Invalid file: Could not read or parse "${filePath}"`));
+        } else {
+          cb();
+        }
+      });
+  }
 }
 
-// A subset of the response returned by npm's registry
-type RegistryResponse = {
-  "dist-tags": Record<string, string>;
-  time: {
-    created: string;
-    modified: string;
-    [version: string]: string;
-  };
-  versions: any;
-};
+class Distinctify extends Transform {
+  private seen = new Set<string>();
 
-type PackageInfo = {
-  name: string;
-  mostRecentReleaseDate?: Date;
-};
+  constructor() {
+    super({ objectMode: true });
+  }
 
-function isDitched(
-  { mostRecentReleaseDate }: PackageInfo,
-  ditchDays: number,
-): boolean {
-  if (!mostRecentReleaseDate) return false;
-  const ageDays = daysSince(mostRecentReleaseDate);
-  return ageDays >= ditchDays;
-}
-
-function printInfoTable(
-  dataForPackages: PackageInfo[],
-  ditchDays: number,
-): void {
-  let packagesToShow: PackageInfo[] = [];
-  let longestNameLength = 0;
-
-  for (const data of dataForPackages) {
-    if (isDitched(data, ditchDays)) {
-      packagesToShow.push(data);
-      longestNameLength = Math.max(longestNameLength, data.name.length);
-      process.exitCode = 1;
+  override _transform(
+    name: string,
+    _enc: BufferEncoding,
+    cb: (err?: Error | null) => void,
+  ): void {
+    if (!this.seen.has(name)) {
+      this.seen.add(name);
+      this.push(name);
     }
+    cb();
   }
-
-  if (!packagesToShow.length) {
-    return;
-  }
-
-  packagesToShow
-    .sort((a, b) => {
-      if (!a.mostRecentReleaseDate) return -1;
-      if (!b.mostRecentReleaseDate) return 1;
-      return (
-        a.mostRecentReleaseDate.getTime() - b.mostRecentReleaseDate.getTime()
-      );
-    })
-    .forEach((packageInfo) => {
-      const { name, mostRecentReleaseDate } = packageInfo;
-
-      const formattedTime = mostRecentReleaseDate
-        ? `${daysSince(mostRecentReleaseDate)} days ago`
-        : "No package info found.";
-
-      console.log([name.padEnd(longestNameLength), formattedTime].join("\t"));
-    });
 }
 
-async function getInfoForPackage(
-  packageName: string,
-  levels: number,
-): Promise<PackageInfo> {
-  if (packageName in packageInfoCache) {
-    return packageInfoCache[packageName];
+class RegistryLookup extends Transform {
+  private inFlight = 0;
+  private pendingCb: (() => void) | null = null;
+  private tasks: Promise<unknown>[] = [];
+  private readonly ditchDays: number;
+  private readonly maxConcurrency: number;
+  private readonly registryUrl: string;
+
+  constructor(opts: {
+    ditchDays: number;
+    maxConcurrency: number;
+    registryUrl: string;
+  }) {
+    super({ objectMode: true });
+    this.ditchDays = opts.ditchDays;
+    this.maxConcurrency = Math.max(opts.maxConcurrency, 1);
+    this.registryUrl = opts.registryUrl;
   }
-  try {
-    const regUrl = REGISTRY_URL + "/" + packageName;
-    const response = await getJSON<RegistryResponse>(regUrl);
 
-    const mostRecentReleasedEntry = Object.entries(response.time)
-      .filter(([key]) => key !== "created" && key !== "modified")
-      .reduce((acc, el) => (el[1] > acc[1] ? el : acc));
-
-    const mostRecentReleaseDate = new Date(mostRecentReleasedEntry[1]);
-    const mostRecentReleaseVersion = mostRecentReleasedEntry[0];
-    const mostRecentReleaseVersionDetails =
-      response.versions[mostRecentReleaseVersion];
-    const { dependencies = {}, devDependencies = {} } =
-      mostRecentReleaseVersionDetails;
-
-    const dependencyPackages = [
-      ...Object.keys(dependencies),
-      ...Object.keys(devDependencies),
-    ];
-
-    const result: PackageInfo = {
-      name: packageName,
-      mostRecentReleaseDate,
-    };
-
-    packageInfoCache[packageName] = result;
-
-    if (levels === 1) {
-      await Promise.all(
-        dependencyPackages.map((pkg) => getInfoForPackage(pkg, 0)),
-      );
-    } else if (levels > 1) {
-      for (const dependencyPackage of dependencyPackages) {
-        await getInfoForPackage(dependencyPackage, levels - 1);
+  override _transform(
+    name: string,
+    _enc: BufferEncoding,
+    cb: (err?: Error | null) => void,
+  ): void {
+    this.inFlight++;
+    const task = this.fetchAndMaybeEmit(name).finally(() => {
+      this.inFlight--;
+      if (this.pendingCb) {
+        const resume = this.pendingCb;
+        this.pendingCb = null;
+        resume();
       }
+    });
+    this.tasks.push(task);
+
+    if (this.inFlight < this.maxConcurrency) {
+      cb();
+    } else {
+      this.pendingCb = () => cb();
     }
-    return result;
-  } catch {
-    return {
-      name: packageName,
-    };
   }
+
+  override _flush(cb: (err?: Error | null) => void): void {
+    Promise.allSettled(this.tasks).then(() => cb());
+  }
+
+  private async fetchAndMaybeEmit(name: string): Promise<void> {
+    try {
+      const res = await fetch(`${this.registryUrl}/${name}`);
+      if (!res.ok) return;
+      const data = (await res.json()) as RegistryResponse;
+
+      const releaseEntries = Object.entries(data.time).filter(
+        ([key]) => key !== "created" && key !== "modified",
+      );
+      if (releaseEntries.length === 0) return;
+
+      const mostRecent = releaseEntries.reduce((acc, el) =>
+        el[1] > acc[1] ? el : acc,
+      );
+      const releaseDate = new Date(mostRecent[1]);
+      const ageDays = daysSince(releaseDate);
+
+      if (ageDays >= this.ditchDays) {
+        this.push({ name, ageDays } satisfies DitchedPackage);
+      }
+    } catch {}
+  }
+}
+
+class Logger extends Writable {
+  constructor() {
+    super({ objectMode: true });
+  }
+
+  override _write(
+    pkg: DitchedPackage,
+    _enc: BufferEncoding,
+    cb: (err?: Error | null) => void,
+  ): void {
+    process.exitCode = 1;
+    const age = `${pkg.ageDays}`;
+    console.log([age, pkg.name].join("\t"));
+    cb();
+  }
+}
+
+function stdinPathSource(): Readable {
+  const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
+  return Readable.from(
+    (async function* (): AsyncGenerator<FileRecord> {
+      for await (const line of rl) {
+        const path = line.trim();
+        if (path) yield { path, includeDev: true };
+      }
+    })(),
+    { objectMode: true },
+  );
+}
+
+function fileRecordSource(files: string[]): Readable {
+  return Readable.from(
+    (files.length > 0 ? files : ["./package.json"]).map((p) => ({
+      path: p,
+      includeDev: true,
+    })),
+    { objectMode: true },
+  );
 }
 
 async function main() {
+  const rawArgs = hideBin(process.argv);
   const argv = await parseArgs();
-  const packageJsonFiles = argv["files"] as string[];
+  const parsedFiles = (argv["files"] as string[] | undefined) ?? [];
+  const useStdin = rawArgs.includes("-");
 
-  const packages = new Set<string>();
-
-  for (const packageJsonFile of packageJsonFiles) {
-    try {
-      const packageJsonStr = await readFile(packageJsonFile, {
-        encoding: "utf8",
-      });
-
-      const { dependencies = {}, devDependencies = {} } =
-        JSON.parse(packageJsonStr);
-
-      Object.keys(dependencies).forEach((pkg) => packages.add(pkg));
-      Object.keys(devDependencies).forEach((pkg) => packages.add(pkg));
-    } catch {
-      console.error(
-        `Invalid file: Could not read or parse "${packageJsonFile}"`,
-      );
-      process.exit(1);
-    }
+  if (useStdin && parsedFiles.length > 0) {
+    console.error('Error: "-" (stdin) cannot be combined with other files.');
+    process.exit(2);
   }
 
-  const levels =
-    Number.isSafeInteger(argv.levels) && argv.levels >= 0 ? argv.levels : 0;
+  const source = useStdin ? stdinPathSource() : fileRecordSource(parsedFiles);
 
-  let dataForPackages: PackageInfo[] = [];
-  if (levels === 0) {
-    dataForPackages = await Promise.all(
-      [...packages].map((packageName) => getInfoForPackage(packageName, 0)),
-    );
-  } else {
-    for (const packageName of packages) {
-      await getInfoForPackage(packageName, levels);
+  await pipeline(
+    source,
+    new FilesToPackageNames(),
+    new Distinctify(),
+    new RegistryLookup({
+      registryUrl: argv.registry,
+      ditchDays: argv.days,
+      maxConcurrency: argv.concurrency,
+    }),
+    new Logger(),
+  );
+}
+
+// When piped into a consumer that closes early (e.g. `| head -1`), writes to
+// stdout fail with EPIPE. Swallow it and exit with whatever exit code is
+// already set, so `ditched | head -1` is well-behaved.
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EPIPE") {
+      process.exit();
     }
-    dataForPackages = Object.values(packageInfoCache);
-  }
-
-  printInfoTable(dataForPackages, argv.days);
+  });
 }
 
 main().catch((error) => {
+  if ((error as NodeJS.ErrnoException)?.code === "EPIPE") {
+    process.exit();
+  }
   console.error("An unexpected error occurred:", error);
   process.exit(1);
 });
