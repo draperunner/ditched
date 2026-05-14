@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import path from "node:path";
 import fs from "node:fs";
-import https from "node:https";
 
 import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
@@ -30,22 +29,14 @@ async function parseArgs() {
   }).argv;
 }
 
-function getJSON<T>(url: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const request = https.get(url, (response) => {
-      if (!response.statusCode || response.statusCode >= 400) {
-        return reject(
-          new Error(
-            `Could not fetch URL ${url} package info. Status code ${response.statusCode}`,
-          ),
-        );
-      }
-      const body: any[] = [];
-      response.on("data", (chunk) => body.push(chunk));
-      response.on("end", () => resolve(JSON.parse(body.join(""))));
-      request.on("error", (err) => reject(err));
-    });
-  });
+async function getJSON<T>(url: string): Promise<T> {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(
+      `Could not fetch URL ${url} package info. Status code ${res.status}`,
+    );
+  }
+  return (await res.json()) as T;
 }
 
 // A subset of the response returned by npm's registry
