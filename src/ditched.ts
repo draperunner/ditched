@@ -1,26 +1,19 @@
 #!/usr/bin/env node
-import path from "path";
-import fs from "fs";
-import https from "https";
-import CliTable from "cli-table";
-import chalk from "chalk";
+import path from "node:path";
+import fs from "node:fs";
+import https from "node:https";
+
 import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
 
-import { differenceInMilliseconds, formatTimeSince } from "./time.js";
+import { daysSince } from "./time.js";
 
-const MS_IN_A_DAY = 1000 * 60 * 60 * 24;
 const REGISTRY_URL = "https://registry.npmjs.org";
+
+const packageInfoCache: { [key: string]: PackageInfo } = {};
 
 async function parseArgs() {
   return await yargs(hideBin(process.argv)).options({
-    all: {
-      type: "boolean",
-      default: false,
-      alias: ["a"],
-      description:
-        "Include all dependencies in the resulting table, not only those that are ditched",
-    },
     days: {
       type: "number",
       default: 365,
@@ -76,60 +69,46 @@ function isDitched(
   ditchDays: number,
 ): boolean {
   if (!mostRecentReleaseDate) return false;
-  const ageDays =
-    differenceInMilliseconds(new Date(), mostRecentReleaseDate) / MS_IN_A_DAY;
-  return ageDays > ditchDays;
+  const ageDays = daysSince(mostRecentReleaseDate);
+  return ageDays >= ditchDays;
 }
 
 function printInfoTable(
   dataForPackages: PackageInfo[],
-  showAllPackages: boolean,
   ditchDays: number,
 ): void {
-  const packagesToShow = dataForPackages.filter(
-    (data) => showAllPackages || isDitched(data, ditchDays),
-  );
+  let packagesToShow: PackageInfo[] = [];
+  let longestNameLength = 0;
+
+  for (const data of dataForPackages) {
+    if (isDitched(data, ditchDays)) {
+      packagesToShow.push(data);
+      longestNameLength = Math.max(longestNameLength, data.name.length);
+      process.exitCode = 1;
+    }
+  }
 
   if (!packagesToShow.length) {
     return;
   }
 
-  const table = new CliTable({
-    head: [
-      chalk.gray("Package"),
-      chalk.gray("Latest Release"),
-      chalk.gray("Ditched?"),
-    ],
-    colWidths: [30, 40, 15],
-  });
-
   packagesToShow
     .sort((a, b) => {
       if (!a.mostRecentReleaseDate) return -1;
       if (!b.mostRecentReleaseDate) return 1;
-      return differenceInMilliseconds(
-        b.mostRecentReleaseDate,
-        a.mostRecentReleaseDate,
+      return (
+        a.mostRecentReleaseDate.getTime() - b.mostRecentReleaseDate.getTime()
       );
     })
     .forEach((packageInfo) => {
       const { name, mostRecentReleaseDate } = packageInfo;
 
       const formattedTime = mostRecentReleaseDate
-        ? formatTimeSince(mostRecentReleaseDate)
+        ? `${daysSince(mostRecentReleaseDate)} days ago`
         : "No package info found.";
 
-      let ditchedInfo = chalk.red("?");
-      if (mostRecentReleaseDate) {
-        ditchedInfo = isDitched(packageInfo, ditchDays)
-          ? chalk.red("Yes")
-          : chalk.green("No");
-      }
-
-      table.push([name, formattedTime, ditchedInfo]);
+      console.log([name.padEnd(longestNameLength), formattedTime].join("\t"));
     });
-
-  console.log(table.toString());
 }
 
 async function getInfoForPackage(
@@ -183,8 +162,6 @@ async function getInfoForPackage(
   }
 }
 
-const packageInfoCache: { [key: string]: PackageInfo } = {};
-
 async function main() {
   const argv = await parseArgs();
 
@@ -217,11 +194,7 @@ async function main() {
     dataForPackages = Object.values(packageInfoCache);
   }
 
-  printInfoTable(dataForPackages, argv.all, argv.days);
-
-  if (dataForPackages.filter(isDitched).length > 0) {
-    process.exit(1);
-  }
+  printInfoTable(dataForPackages, argv.days);
 }
 
 main();

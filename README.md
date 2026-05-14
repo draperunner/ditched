@@ -5,7 +5,15 @@ A ditched package is one that has not been updated in more than one year.
 
 This is a fork of the abandoned project [abandoned](https://github.com/brendonboshell/abandoned).
 
-![ditched usage](screenshot.png)
+Example output:
+
+```
+> npx ditched
+cli-table       	1619 days ago
+@types/cli-table	919 days ago
+```
+
+If there are no ditched packages, there will be no output.
 
 ## How to Use
 
