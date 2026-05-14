@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-import path from "node:path";
-import fs from "node:fs";
+import { readFile } from "node:fs/promises";
 
 import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
@@ -12,21 +11,42 @@ const REGISTRY_URL = "https://registry.npmjs.org";
 const packageInfoCache: { [key: string]: PackageInfo } = {};
 
 async function parseArgs() {
-  return await yargs(hideBin(process.argv)).options({
-    days: {
-      type: "number",
-      default: 365,
-      alias: ["d"],
-      description:
-        "The number of days since last release needed to consider a package as ditched",
-    },
-    levels: {
-      type: "number",
-      default: 0,
-      alias: ["l"],
-      description: "How many levels we go down recursively",
-    },
-  }).argv;
+  return await yargs(hideBin(process.argv))
+    .command(
+      "$0 [files..]",
+      "List dependencies that haven't been updated in a long time.",
+      (yargs) =>
+        yargs.positional("files", {
+          type: "string",
+          array: true,
+          description: "One or more package.json files to check",
+          default: ["./package.json"],
+        }),
+    )
+    .options({
+      days: {
+        type: "number",
+        default: 365,
+        alias: ["d"],
+        description:
+          "The number of days since last release needed to consider a package as ditched",
+      },
+      levels: {
+        type: "number",
+        default: 0,
+        alias: ["l"],
+        description: "How many levels we go down recursively",
+      },
+    })
+    .example(
+      "ditched --days 14",
+      "Find packages in the current directory's package.json with no releases in the last 14 days.",
+    )
+    .example(
+      "ditched ./package.json ./packages/*/package.json",
+      "Monorepo: Find ditched packages in the specified package.json files.",
+    )
+    .parseAsync();
 }
 
 async function getJSON<T>(url: string): Promise<T> {
@@ -146,7 +166,7 @@ async function getInfoForPackage(
       }
     }
     return result;
-  } catch (error) {
+  } catch {
     return {
       name: packageName,
     };
@@ -155,20 +175,28 @@ async function getInfoForPackage(
 
 async function main() {
   const argv = await parseArgs();
+  const packageJsonFiles = argv["files"] as string[];
 
-  const packageJsonPath = path.join(process.cwd(), "package.json");
+  const packages = new Set<string>();
 
-  const packageJsonStr = fs.readFileSync(packageJsonPath, {
-    encoding: "utf8",
-  });
+  for (const packageJsonFile of packageJsonFiles) {
+    try {
+      const packageJsonStr = await readFile(packageJsonFile, {
+        encoding: "utf8",
+      });
 
-  const { dependencies = {}, devDependencies = {} } =
-    JSON.parse(packageJsonStr);
+      const { dependencies = {}, devDependencies = {} } =
+        JSON.parse(packageJsonStr);
 
-  const packages = [
-    ...Object.keys(dependencies),
-    ...Object.keys(devDependencies),
-  ];
+      Object.keys(dependencies).forEach((pkg) => packages.add(pkg));
+      Object.keys(devDependencies).forEach((pkg) => packages.add(pkg));
+    } catch {
+      console.error(
+        `Invalid file: Could not read or parse "${packageJsonFile}"`,
+      );
+      process.exit(1);
+    }
+  }
 
   const levels =
     Number.isSafeInteger(argv.levels) && argv.levels >= 0 ? argv.levels : 0;
@@ -176,7 +204,7 @@ async function main() {
   let dataForPackages: PackageInfo[] = [];
   if (levels === 0) {
     dataForPackages = await Promise.all(
-      packages.map((packageName) => getInfoForPackage(packageName, 0)),
+      [...packages].map((packageName) => getInfoForPackage(packageName, 0)),
     );
   } else {
     for (const packageName of packages) {
@@ -188,4 +216,7 @@ async function main() {
   printInfoTable(dataForPackages, argv.days);
 }
 
-main();
+main().catch((error) => {
+  console.error("An unexpected error occurred:", error);
+  process.exit(1);
+});
