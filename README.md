@@ -59,13 +59,26 @@ Options:
                      request per package)                 [number] [default: 20]
   -r, --registry     The URL of the npm registry to use
                                 [string] [default: "https://registry.npmjs.org"]
+  -i, --include      Which dependency types to include when reading
+                     package.json. Use -i multiple times or provide a
+                     whitespace-separated list to include multiple types.
+        [array] [choices: "dependencies", "devDependencies", "peerDependencies",
+           "optionalDependencies"] [default: ["dependencies","devDependencies"]]
 
 Examples:
   ditched --days 14                         Find packages in the current
                                             directory's package.json with no
                                             releases in the last 14 days.
+  ditched --include dependencies            Include all dependency types when
+  devDependencies peerDependencies          checking for ditched packages (not
+  optionalDependencies                      just dependencies and
+                                            devDependencies).
   ditched ./package.json                    Monorepo: Find ditched packages in
   ./packages/*/package.json                 the specified package.json files.
+  ditched -i dependencies --                Only check production dependencies
+  ./package.json ./packages/*/package.json  in a monorepo. Use the -- separator
+                                            to avoid ambiguity between the -i
+                                            flag and positional file arguments.
   find . -name package.json | ditched -     Read newline-delimited package.json
                                             paths from stdin.
 ```

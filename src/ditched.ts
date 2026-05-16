@@ -18,8 +18,13 @@ type RegistryResponse = {
   };
 };
 
-type FileRecord = { path: string; includeDev: boolean };
 type DitchedPackage = { name: string; ageDays: number };
+
+type DepType =
+  | "dependencies"
+  | "devDependencies"
+  | "peerDependencies"
+  | "optionalDependencies";
 
 async function parseArgs() {
   return await yargs(hideBin(process.argv))
@@ -55,14 +60,36 @@ async function parseArgs() {
         alias: ["r"],
         description: "The URL of the npm registry to use",
       },
+      include: {
+        type: "string",
+        array: true,
+        alias: ["i"],
+        default: ["dependencies", "devDependencies"],
+        choices: [
+          "dependencies",
+          "devDependencies",
+          "peerDependencies",
+          "optionalDependencies",
+        ],
+        description:
+          "Which dependency types to include when reading package.json. Use -i multiple times or provide a whitespace-separated list to include multiple types.",
+      },
     })
     .example(
       "ditched --days 14",
       "Find packages in the current directory's package.json with no releases in the last 14 days.",
     )
     .example(
+      "ditched --include dependencies devDependencies peerDependencies optionalDependencies",
+      "Include all dependency types when checking for ditched packages (not just dependencies and devDependencies).",
+    )
+    .example(
       "ditched ./package.json ./packages/*/package.json",
       "Monorepo: Find ditched packages in the specified package.json files.",
+    )
+    .example(
+      "ditched -i dependencies -- ./package.json ./packages/*/package.json",
+      "Only check production dependencies in a monorepo. Use the -- separator to avoid ambiguity between the -i flag and positional file arguments.",
     )
     .example(
       "find . -name package.json | ditched -",
@@ -72,37 +99,36 @@ async function parseArgs() {
 }
 
 class FilesToPackageNames extends Transform {
-  constructor() {
+  private readonly include: DepType[];
+
+  constructor(opts: { include: DepType[] }) {
     super({ objectMode: true });
+    this.include = opts.include;
   }
 
   override _transform(
-    record: FileRecord,
+    filePath: string,
     _enc: BufferEncoding,
     cb: (err?: Error | null) => void,
   ): void {
-    const { path: filePath, includeDev } = record;
     readFile(filePath, { encoding: "utf8" })
       .then((contents) => {
-        const { dependencies = {}, devDependencies = {} } = JSON.parse(
-          contents,
-        ) as {
+        const parsed = JSON.parse(contents) as {
           dependencies?: Record<string, string>;
           devDependencies?: Record<string, string>;
+          peerDependencies?: Record<string, string>;
+          optionalDependencies?: Record<string, string>;
         };
 
-        for (const name of Object.keys(dependencies)) this.push(name);
-        if (includeDev) {
-          for (const name of Object.keys(devDependencies)) this.push(name);
+        for (const depType of this.include) {
+          for (const name of Object.keys(parsed[depType] || {})) {
+            this.push(name);
+          }
         }
         cb();
       })
       .catch(() => {
-        if (includeDev) {
-          cb(new Error(`Invalid file: Could not read or parse "${filePath}"`));
-        } else {
-          cb();
-        }
+        cb(new Error(`Invalid file: Could not read or parse "${filePath}"`));
       });
   }
 }
@@ -217,10 +243,12 @@ class Logger extends Writable {
 function stdinPathSource(): Readable {
   const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
   return Readable.from(
-    (async function* (): AsyncGenerator<FileRecord> {
+    (async function* (): AsyncGenerator<string> {
       for await (const line of rl) {
         const path = line.trim();
-        if (path) yield { path, includeDev: true };
+        if (path) {
+          yield path;
+        }
       }
     })(),
     { objectMode: true },
@@ -228,19 +256,18 @@ function stdinPathSource(): Readable {
 }
 
 function fileRecordSource(files: string[]): Readable {
-  return Readable.from(
-    (files.length > 0 ? files : ["./package.json"]).map((p) => ({
-      path: p,
-      includeDev: true,
-    })),
-    { objectMode: true },
-  );
+  return Readable.from(files.length > 0 ? files : ["./package.json"], {
+    objectMode: true,
+  });
 }
 
 async function main() {
   const rawArgs = hideBin(process.argv);
   const argv = await parseArgs();
-  const parsedFiles = (argv["files"] as string[] | undefined) ?? [];
+  const parsedFiles = [
+    ...((argv["files"] as string[] | undefined) ?? []),
+    ...argv._.map(String),
+  ];
   const useStdin = rawArgs.includes("-");
 
   if (useStdin && parsedFiles.length > 0) {
@@ -252,7 +279,9 @@ async function main() {
 
   await pipeline(
     source,
-    new FilesToPackageNames(),
+    new FilesToPackageNames({
+      include: argv.include as DepType[],
+    }),
     new Distinctify(),
     new RegistryLookup({
       registryUrl: argv.registry,
