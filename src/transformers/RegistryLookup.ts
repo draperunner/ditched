@@ -27,6 +27,8 @@ export class RegistryLookup extends Transform {
     this.ditchDays = opts.ditchDays;
     this.maxConcurrency = Math.max(opts.maxConcurrency, 1);
     this.registryUrl = opts.registryUrl;
+
+    void fetch(this.registryUrl, { method: "HEAD" }).catch(() => {});
   }
 
   override _transform(
