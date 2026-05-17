@@ -1,30 +1,16 @@
 #!/usr/bin/env node
-import { readFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
-import { Readable, Transform, Writable } from "node:stream";
+import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 import yargs from "yargs/yargs";
 import { hideBin } from "yargs/helpers";
 
-import { daysSince } from "./time.js";
-
-type RegistryResponse = {
-  "dist-tags": Record<string, string>;
-  time: {
-    created: string;
-    modified: string;
-    [version: string]: string;
-  };
-};
-
-type DitchedPackage = { name: string; ageDays: number };
-
-type DepType =
-  | "dependencies"
-  | "devDependencies"
-  | "peerDependencies"
-  | "optionalDependencies";
+import { RegistryLookup } from "./transformers/RegistryLookup.js";
+import { FilesToPackageNames } from "./transformers/FilesToPackageNames.js";
+import { Distinctify } from "./transformers/Distinctify.js";
+import { Outputter } from "./transformers/Outputter.js";
+import { DepType } from "./types.js";
 
 async function parseArgs() {
   return await yargs(hideBin(process.argv))
@@ -98,148 +84,6 @@ async function parseArgs() {
     .parseAsync();
 }
 
-class FilesToPackageNames extends Transform {
-  private readonly include: DepType[];
-
-  constructor(opts: { include: DepType[] }) {
-    super({ objectMode: true });
-    this.include = opts.include;
-  }
-
-  override _transform(
-    filePath: string,
-    _enc: BufferEncoding,
-    cb: (err?: Error | null) => void,
-  ): void {
-    readFile(filePath, { encoding: "utf8" })
-      .then((contents) => {
-        const parsed = JSON.parse(contents) as {
-          dependencies?: Record<string, string>;
-          devDependencies?: Record<string, string>;
-          peerDependencies?: Record<string, string>;
-          optionalDependencies?: Record<string, string>;
-        };
-
-        for (const depType of this.include) {
-          for (const name of Object.keys(parsed[depType] || {})) {
-            this.push(name);
-          }
-        }
-        cb();
-      })
-      .catch(() => {
-        cb(new Error(`Invalid file: Could not read or parse "${filePath}"`));
-      });
-  }
-}
-
-class Distinctify extends Transform {
-  private seen = new Set<string>();
-
-  constructor() {
-    super({ objectMode: true });
-  }
-
-  override _transform(
-    name: string,
-    _enc: BufferEncoding,
-    cb: (err?: Error | null) => void,
-  ): void {
-    if (!this.seen.has(name)) {
-      this.seen.add(name);
-      this.push(name);
-    }
-    cb();
-  }
-}
-
-class RegistryLookup extends Transform {
-  private inFlight = 0;
-  private pendingCb: (() => void) | null = null;
-  private tasks: Promise<unknown>[] = [];
-  private readonly ditchDays: number;
-  private readonly maxConcurrency: number;
-  private readonly registryUrl: string;
-
-  constructor(opts: {
-    ditchDays: number;
-    maxConcurrency: number;
-    registryUrl: string;
-  }) {
-    super({ objectMode: true });
-    this.ditchDays = opts.ditchDays;
-    this.maxConcurrency = Math.max(opts.maxConcurrency, 1);
-    this.registryUrl = opts.registryUrl;
-  }
-
-  override _transform(
-    name: string,
-    _enc: BufferEncoding,
-    cb: (err?: Error | null) => void,
-  ): void {
-    this.inFlight++;
-    const task = this.fetchAndMaybeEmit(name).finally(() => {
-      this.inFlight--;
-      if (this.pendingCb) {
-        const resume = this.pendingCb;
-        this.pendingCb = null;
-        resume();
-      }
-    });
-    this.tasks.push(task);
-
-    if (this.inFlight < this.maxConcurrency) {
-      cb();
-    } else {
-      this.pendingCb = () => cb();
-    }
-  }
-
-  override _flush(cb: (err?: Error | null) => void): void {
-    Promise.allSettled(this.tasks).then(() => cb());
-  }
-
-  private async fetchAndMaybeEmit(name: string): Promise<void> {
-    try {
-      const res = await fetch(`${this.registryUrl}/${name}`);
-      if (!res.ok) return;
-      const data = (await res.json()) as RegistryResponse;
-
-      const releaseEntries = Object.entries(data.time).filter(
-        ([key]) => key !== "created" && key !== "modified",
-      );
-      if (releaseEntries.length === 0) return;
-
-      const mostRecent = releaseEntries.reduce((acc, el) =>
-        el[1] > acc[1] ? el : acc,
-      );
-      const releaseDate = new Date(mostRecent[1]);
-      const ageDays = daysSince(releaseDate);
-
-      if (ageDays >= this.ditchDays) {
-        this.push({ name, ageDays } satisfies DitchedPackage);
-      }
-    } catch {}
-  }
-}
-
-class Logger extends Writable {
-  constructor() {
-    super({ objectMode: true });
-  }
-
-  override _write(
-    pkg: DitchedPackage,
-    _enc: BufferEncoding,
-    cb: (err?: Error | null) => void,
-  ): void {
-    process.exitCode = 1;
-    const age = `${pkg.ageDays}`;
-    console.log([age, pkg.name].join("\t"));
-    cb();
-  }
-}
-
 function stdinPathSource(): Readable {
   const rl = createInterface({ input: process.stdin, crlfDelay: Infinity });
   return Readable.from(
@@ -288,7 +132,7 @@ async function main() {
       ditchDays: argv.days,
       maxConcurrency: argv.concurrency,
     }),
-    new Logger(),
+    new Outputter(),
   );
 }
 
